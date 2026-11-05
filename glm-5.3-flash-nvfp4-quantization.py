@@ -8,17 +8,21 @@ import yaml
 from calibration_dataset import create_calibration_dataset
 
 
-def load_config(work_dir: Path) -> tuple[str, Any, Path, bool]:
+def load_config(work_dir: Path) -> tuple[str, Any, Path, Path, bool]:
     config = yaml.safe_load((work_dir / "config.yaml").read_text(encoding="utf-8"))
     model_id = config["model_id"]
     device_map = config["device_map"]
     save_dir = Path(config["save_dir"]).expanduser()
+    offload_folder = Path(config.get("offload_folder", "~/weight-offload")).expanduser()
     use_bundled_template = config["use_bundled_chat_template"]
     if not isinstance(use_bundled_template, bool):
         raise TypeError("use_bundled_chat_template must be true or false")
     if not save_dir.is_absolute():
         save_dir = work_dir / save_dir
-    return model_id, device_map, save_dir, use_bundled_template
+    if not offload_folder.is_absolute():
+        offload_folder = work_dir / offload_folder
+    offload_folder.mkdir(parents=True, exist_ok=True)
+    return model_id, device_map, save_dir, offload_folder, use_bundled_template
 
 
 def apply_chat_template_file(
@@ -39,7 +43,7 @@ def main() -> None:
     from transformers import AutoTokenizer, Glm5NextForConditionalGeneration
 
     work_dir = Path.cwd()
-    model_id, device_map, save_dir, use_bundled_template = load_config(work_dir)
+    model_id, device_map, save_dir, offload_folder, use_bundled_template = load_config(work_dir)
     if not torch.cuda.is_available():
         raise RuntimeError(
             "Quantization requires a CUDA GPU; run CPU tests with python -m unittest -v"
@@ -48,9 +52,6 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     apply_chat_template_file(tokenizer, work_dir, use_bundled_template)
     calibration_dataset = create_calibration_dataset(tokenizer)
-
-    offload_folder = Path.home() / "weight-offload"
-    offload_folder.mkdir(parents=True, exist_ok=True)
 
     # Keep the vision tower and linearize MoE experts for expert-only quantization.
     with load_context(Glm5NextForConditionalGeneration):
