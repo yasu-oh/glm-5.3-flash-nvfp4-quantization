@@ -49,10 +49,13 @@ def main() -> None:
     apply_chat_template_file(tokenizer, work_dir, use_bundled_template)
     calibration_dataset = create_calibration_dataset(tokenizer)
 
+    offload_folder = Path.home() / "weight-offload"
+    offload_folder.mkdir(parents=True, exist_ok=True)
+
     # Keep the vision tower and linearize MoE experts for expert-only quantization.
     with load_context(Glm5NextForConditionalGeneration):
         model = Glm5NextForConditionalGeneration.from_pretrained(
-            model_id, dtype="auto", device_map=device_map
+            model_id, dtype="auto", device_map=device_map, offload_folder=str(offload_folder)
         )
 
     nvfp4_scheme = preset_name_to_scheme(
