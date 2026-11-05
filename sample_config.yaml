@@ -1,0 +1,4 @@
+model_id: zai-org/GLM-5.3-Flash-BF16
+device_map: auto_offload
+save_dir: GLM-5.3-Flash-NVFP4
+use_bundled_chat_template: true
