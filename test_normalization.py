@@ -508,7 +508,7 @@ class RealTokenizerTests(unittest.TestCase):
                         rendered,
                     )
                 self.assertLessEqual(
-                    len(tokenizer.encode(rendered, add_special_tokens=False)), 8192
+                    len(tokenizer.encode(rendered, add_special_tokens=False)), 2048
                 )
                 response_count += len(results)
         self.assertGreater(response_count, 0)
@@ -523,7 +523,7 @@ class RealTokenizerTests(unittest.TestCase):
         print(
             f"\nCalibration: {len(calibration)} samples, {response_count} tool responses; "
             f"token lengths {min(lengths)}..{max(lengths)}; "
-            f"{sum(length > 8192 for length in lengths)} samples above oneshot's 8192-token limit"
+            f"{sum(length > 2048 for length in lengths)} samples above oneshot's 2048-token limit"
         )
 
 

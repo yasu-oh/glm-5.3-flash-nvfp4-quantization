@@ -85,7 +85,7 @@ def main() -> None:
         num_calibration_samples=len(calibration_dataset),
         shuffle_calibration_samples=False,
         text_column="text",
-        max_seq_length=8192,
+        max_seq_length=2048,
         pad_to_max_length=False,
     )
     model.generation_config.top_p = None
