@@ -9,8 +9,9 @@ Calibration uses 1,024 chat-template-normalized samples: 512 from `CohereLabs/ay
 Requires a CUDA GPU and current packages with GLM5Next support.
 
 ```bash
-pip install --upgrade datasets pyyaml
-pip install --upgrade --pre compressed-tensors llmcompressor
+pip install 'flash-linear-attention[cuda]' datasets pyyaml transformers
+pip install causal-conv1d --no-build-isolation
+pip install --pre compressed-tensors llmcompressor
 cp sample_config.yaml config.yaml
 # Edit model_id, device_map, save_dir, and use_bundled_chat_template.
 python glm-5.3-flash-nvfp4-quantization.py
