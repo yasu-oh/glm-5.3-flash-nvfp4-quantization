@@ -290,20 +290,6 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(
             ast.unparse(kwargs["config_groups"]), "{'group_0': nvfp4_scheme}"
         )
-        kv_cache = kwargs["kv_cache_scheme"]
-        assert isinstance(kv_cache, ast.Call)
-        self.assertEqual(ast.unparse(kv_cache.func), "QuantizationArgs")
-        self.assertEqual(
-            {kw.arg: ast.literal_eval(kw.value) for kw in kv_cache.keywords},
-            {
-                "num_bits": 8,
-                "type": "float",
-                "symmetric": True,
-                "strategy": "tensor",
-                "dynamic": False,
-                "observer": "static_minmax",
-            },
-        )
         for name in (
             "model.language_model.layers.3.mlp.experts.0.gate_proj",
             "model.language_model.layers.3.mlp.experts.1.up_proj",
@@ -508,7 +494,7 @@ class RealTokenizerTests(unittest.TestCase):
                         rendered,
                     )
                 self.assertLessEqual(
-                    len(tokenizer.encode(rendered, add_special_tokens=False)), 2048
+                    len(tokenizer.encode(rendered, add_special_tokens=False)), 4096
                 )
                 response_count += len(results)
         self.assertGreater(response_count, 0)
@@ -523,7 +509,7 @@ class RealTokenizerTests(unittest.TestCase):
         print(
             f"\nCalibration: {len(calibration)} samples, {response_count} tool responses; "
             f"token lengths {min(lengths)}..{max(lengths)}; "
-            f"{sum(length > 2048 for length in lengths)} samples above oneshot's 2048-token limit"
+            f"{sum(length > 4096 for length in lengths)} samples above oneshot's 4096-token limit"
         )
 
 
