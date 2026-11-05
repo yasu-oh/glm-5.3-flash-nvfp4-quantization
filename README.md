@@ -1,6 +1,6 @@
 # GLM-5.3-Flash NVFP4 Quantization
 
-Quantizes `zai-org/GLM-5.3-Flash-BF16` MoE experts using `GPTQModifier`, `nvfp4_expanded_imatrix` (`strict=True`), and FP8 KV-cache quantization.
+Quantizes `zai-org/GLM-5.3-Flash-BF16` MoE experts using `GPTQModifier`, `nvfp4_expanded_imatrix` (`strict=True`).
 
 Calibration uses 1,024 chat-template-normalized samples: 512 from `CohereLabs/aya_dataset` and 512 from `interstellarninja/hermes_reasoning_tool_use`.
 

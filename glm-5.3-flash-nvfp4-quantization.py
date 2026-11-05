@@ -75,14 +75,6 @@ def main() -> None:
             r"re:.*mlp\.gate$",
             r"re:.*self_attn\.indexer\..*",
         ],
-        kv_cache_scheme=QuantizationArgs(
-            num_bits=8,
-            type="float",
-            symmetric=True,
-            strategy="tensor",
-            dynamic=False,
-            observer="static_minmax",
-        ),
     )
 
     oneshot(
