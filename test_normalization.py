@@ -1,11 +1,13 @@
 import ast
 import importlib.util
 import json
+import os
 import re
 import tempfile
 import unittest
 from collections import Counter
 from pathlib import Path
+from unittest.mock import patch
 
 from datasets import load_dataset
 from huggingface_hub import snapshot_download
@@ -53,12 +55,13 @@ class NormalizationTests(unittest.TestCase):
                 "model_id": MODEL_ID,
                 "device_map": device_map,
                 "save_dir": "output",
+                "offload_folder": "offload",
                 "use_bundled_chat_template": False,
             }
             (work_dir / "config.yaml").write_text(json.dumps(config))
             self.assertEqual(
                 QUANTIZATION.load_config(work_dir),
-                (MODEL_ID, device_map, work_dir / "output", False),
+                (MODEL_ID, device_map, work_dir / "output", work_dir / "offload", False),
             )
             config["use_bundled_chat_template"] = "true"
             (work_dir / "config.yaml").write_text(json.dumps(config))
@@ -72,6 +75,47 @@ class NormalizationTests(unittest.TestCase):
             (work_dir / "chat_template.jinja").write_text("bundled")
             QUANTIZATION.apply_chat_template_file(tokenizer, work_dir, True)
             self.assertEqual(tokenizer.chat_template, "bundled")
+
+    def test_offload_folder_resolution_and_creation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            work_dir = root / "work"
+            work_dir.mkdir()
+            home = root / "home"
+            home.mkdir()
+            cases = (
+                (None, home / "weight-offload"),
+                ("offload/weights", work_dir / "offload/weights"),
+                (str(root / "absolute/weights"), root / "absolute/weights"),
+                ("~/custom/weights", home / "custom/weights"),
+            )
+            # Keep default and tilde-expanded paths away from the real home directory.
+            with patch.dict(os.environ, {"HOME": str(home)}):
+                for configured, expected in cases:
+                    with self.subTest(offload_folder=configured):
+                        config = {
+                            "model_id": MODEL_ID,
+                            "device_map": "auto_offload",
+                            "save_dir": "output",
+                            "use_bundled_chat_template": True,
+                        }
+                        if configured is not None:
+                            config["offload_folder"] = configured
+                        (work_dir / "config.yaml").write_text(json.dumps(config))
+                        self.assertFalse(expected.exists())
+                        for _ in range(2):
+                            # Loading again must also accept an existing directory.
+                            self.assertEqual(
+                                QUANTIZATION.load_config(work_dir),
+                                (
+                                    MODEL_ID,
+                                    "auto_offload",
+                                    work_dir / "output",
+                                    expected,
+                                    True,
+                                ),
+                            )
+                            self.assertTrue(expected.is_dir())
 
     def test_tools_and_thinking(self):
         tools = DATASET.normalize_tools(
