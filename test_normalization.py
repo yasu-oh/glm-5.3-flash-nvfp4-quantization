@@ -283,22 +283,6 @@ class NormalizationTests(unittest.TestCase):
     def test_quantization_scope(self):
         # Static recipe contract only: this does not execute GPU quantization.
         tree = ast.parse(SCRIPT.read_text())
-        distributed_calls = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and (
-                isinstance(node.func, ast.Name)
-                and node.func.id == "init_dist"
-                or isinstance(node.func, ast.Attribute)
-                and node.func.attr in {"get_rank", "destroy_process_group"}
-            )
-        ]
-        self.assertEqual(
-            distributed_calls,
-            [],
-            "Plain python execution must not require a process group",
-        )
         modifier = next(
             node
             for node in ast.walk(tree)

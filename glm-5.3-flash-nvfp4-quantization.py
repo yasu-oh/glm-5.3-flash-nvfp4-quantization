@@ -36,6 +36,7 @@ def apply_chat_template_file(
 
 def main() -> None:
     import torch
+    from compressed_tensors.offload import init_dist
     from compressed_tensors.quantization import QuantizationArgs, preset_name_to_scheme
     from llmcompressor import oneshot
     from llmcompressor.modifiers.gptq import GPTQModifier
@@ -49,48 +50,57 @@ def main() -> None:
             "Quantization requires a CUDA GPU; run CPU tests with python -m unittest -v"
         )
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    apply_chat_template_file(tokenizer, work_dir, use_bundled_template)
-    calibration_dataset = create_calibration_dataset(tokenizer)
+    try:
+        # torchrun assigns one GPU per process; initialize before loading anything.
+        init_dist()
 
-    # Keep the vision tower and linearize MoE experts for expert-only quantization.
-    with load_context(Glm5NextForConditionalGeneration):
-        model = Glm5NextForConditionalGeneration.from_pretrained(
-            model_id, dtype="auto", device_map=device_map, offload_folder=str(offload_folder)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        apply_chat_template_file(tokenizer, work_dir, use_bundled_template)
+        calibration_dataset = create_calibration_dataset(tokenizer)
+
+        # Keep the vision tower and linearize MoE experts for expert-only quantization.
+        with load_context(Glm5NextForConditionalGeneration):
+            model = Glm5NextForConditionalGeneration.from_pretrained(
+                model_id, dtype="auto", device_map=device_map, offload_folder=str(offload_folder)
+            )
+
+        nvfp4_scheme = preset_name_to_scheme(
+            "NVFP4", [r"re:.*mlp\.experts\..*(gate|up|down)_proj$"]
+        )
+        if nvfp4_scheme.weights is None:
+            raise RuntimeError("NVFP4 preset does not define weight quantization")
+        nvfp4_scheme.weights.observer = "nvfp4_expanded_imatrix"
+        nvfp4_scheme.weights.observer_kwargs = {"strict": True}
+
+        recipe = GPTQModifier(
+            config_groups={"group_0": nvfp4_scheme},
+            ignore=[
+                r"re:.*visual.*",
+                "lm_head",
+                r"re:.*mlp\.gate$",
+                r"re:.*self_attn\.indexer\..*",
+            ],
         )
 
-    nvfp4_scheme = preset_name_to_scheme(
-        "NVFP4", [r"re:.*mlp\.experts\..*(gate|up|down)_proj$"]
-    )
-    if nvfp4_scheme.weights is None:
-        raise RuntimeError("NVFP4 preset does not define weight quantization")
-    nvfp4_scheme.weights.observer = "nvfp4_expanded_imatrix"
-    nvfp4_scheme.weights.observer_kwargs = {"strict": True}
-
-    recipe = GPTQModifier(
-        config_groups={"group_0": nvfp4_scheme},
-        ignore=[
-            r"re:.*visual.*",
-            "lm_head",
-            r"re:.*mlp\.gate$",
-            r"re:.*self_attn\.indexer\..*",
-        ],
-    )
-
-    oneshot(
-        model=model,
-        processor=tokenizer,
-        recipe=recipe,
-        dataset=calibration_dataset,
-        num_calibration_samples=len(calibration_dataset),
-        shuffle_calibration_samples=False,
-        text_column="text",
-        max_seq_length=4096,
-        pad_to_max_length=False,
-    )
-    model.generation_config.top_p = None
-    model.save_pretrained(save_dir, save_compressed=True)
-    tokenizer.save_pretrained(save_dir)
+        oneshot(
+            model=model,
+            processor=tokenizer,
+            recipe=recipe,
+            dataset=calibration_dataset,
+            num_calibration_samples=len(calibration_dataset),
+            shuffle_calibration_samples=False,
+            text_column="text",
+            max_seq_length=4096,
+            pad_to_max_length=False,
+        )
+        model.generation_config.top_p = None
+        # All ranks must participate: compressed saving gathers offloaded weights.
+        model.save_pretrained(save_dir, save_compressed=True)
+        if torch.distributed.get_rank() == 0:
+            tokenizer.save_pretrained(save_dir)
+    finally:
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group()
 
 
 if __name__ == "__main__":
